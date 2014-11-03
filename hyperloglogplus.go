@@ -1,6 +1,8 @@
 package hyperloglog
 
 import (
+	"bytes"
+	"encoding/gob"
 	"errors"
 	"hash"
 	"sort"
@@ -21,6 +23,72 @@ type HyperLogLogPlus struct {
 	sparse     bool
 	tmpSet     set
 	sparseList *compressedList
+}
+
+// structures with exported fields for gob encoding
+type hyperloglogEncoded struct {
+	Reg        []uint8
+	P          uint8
+	M          uint32
+	Sparse     bool
+	TmpSet     set
+	SparseList *compressedListEncoded
+}
+
+type compressedListEncoded struct {
+	Count uint32
+	B     variableLengthList
+	Last  uint32
+}
+
+// GobEncode implements the gob.GobEncoder interface
+func (h *HyperLogLogPlus) GobEncode() ([]byte, error) {
+	cle := (*compressedListEncoded)(nil)
+	if h.sparseList != nil {
+		cle = &compressedListEncoded{
+			Count: h.sparseList.Count,
+			B:     h.sparseList.b,
+			Last:  h.sparseList.last,
+		}
+	}
+	enc := hyperloglogEncoded{
+		Reg:        h.reg,
+		P:          h.p,
+		M:          h.m,
+		Sparse:     h.sparse,
+		TmpSet:     h.tmpSet,
+		SparseList: cle,
+	}
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(enc)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// GobDecode implements the gob.GobDecoder interface
+func (h *HyperLogLogPlus) GobDecode(buf []byte) error {
+	enc := hyperloglogEncoded{}
+	err := gob.NewDecoder(bytes.NewBuffer(buf)).Decode(&enc)
+	if err != nil {
+		return err
+	}
+	if enc.SparseList != nil {
+		h.sparseList = &compressedList{
+			Count: h.sparseList.Count,
+			b:     enc.SparseList.B,
+			last:  enc.SparseList.Last,
+		}
+	}
+
+	h.reg = enc.Reg
+	h.p = enc.P
+	h.m = enc.M
+	h.sparse = enc.Sparse
+	h.tmpSet = enc.TmpSet
+
+	return nil
 }
 
 // Encode a hash to be used in the sparse representation.
