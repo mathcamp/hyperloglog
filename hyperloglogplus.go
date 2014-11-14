@@ -74,11 +74,15 @@ func (h *HyperLogLogPlus) GobDecode(buf []byte) error {
 	if err != nil {
 		return err
 	}
+
 	if enc.SparseList != nil {
+		count := enc.SparseList.Count
+		b := enc.SparseList.B
+		last := enc.SparseList.Last
 		h.sparseList = &compressedList{
-			Count: h.sparseList.Count,
-			b:     enc.SparseList.B,
-			last:  enc.SparseList.Last,
+			Count: count,
+			b:     b,
+			last:  last,
 		}
 	}
 
